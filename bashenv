@@ -1,0 +1,131 @@
+# Always-on bash environment. No forks: builtins and file tests only.
+# Interactive hooks live in bashrc / conf.d, which this file does not load.
+
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+
+# Prepend $1 when it is a directory and not already on PATH.
+_bash_prepend_dir() {
+  [ -d "$1" ] || return 0
+  case ":${PATH}:" in
+    *":$1:"*) ;;
+    *) PATH="$1${PATH:+:$PATH}" ;;
+  esac
+}
+
+# Nix profiles before brew. Brew is prepended second so it sits in front of nix;
+# path.sh then moves the contract in front of both.
+_user=${USER:-${LOGNAME:-}}
+if [ -n "$_user" ]; then
+  _bash_prepend_dir "/nix/var/nix/profiles/default/bin"
+  _bash_prepend_dir "/run/current-system/sw/bin"
+  _bash_prepend_dir "$HOME/.nix-profile/bin"
+  _bash_prepend_dir "/etc/profiles/per-user/${_user}/bin"
+fi
+unset _user
+
+# Homebrew prefix without `brew shellenv` (that evals path_helper and can drop /bin).
+if [ -z "${HOMEBREW_PREFIX:-}" ]; then
+  if [ -x /opt/homebrew/bin/brew ]; then
+    export HOMEBREW_PREFIX=/opt/homebrew
+    export HOMEBREW_CELLAR=/opt/homebrew/Cellar
+    export HOMEBREW_REPOSITORY=/opt/homebrew
+  elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+    export HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+    export HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+    export HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew
+  elif [ -x /usr/local/bin/brew ]; then
+    export HOMEBREW_PREFIX=/usr/local
+    export HOMEBREW_CELLAR=/usr/local/Cellar
+    export HOMEBREW_REPOSITORY=/usr/local
+  fi
+fi
+if [ -n "${HOMEBREW_PREFIX:-}" ]; then
+  _bash_prepend_dir "$HOMEBREW_PREFIX/sbin"
+  _bash_prepend_dir "$HOMEBREW_PREFIX/bin"
+fi
+
+_bash_ensure_tail() {
+  for _bash_dir in "$@"; do
+    case ":${PATH}:" in
+      *":${_bash_dir}:"*) ;;
+      *) PATH="${PATH:+$PATH:}${_bash_dir}" ;;
+    esac
+  done
+  unset _bash_dir
+}
+_bash_ensure_tail /bin /usr/bin /usr/sbin /sbin
+
+if [ -f "$HOME/.config/shell/profile.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.config/shell/profile.sh"
+fi
+_bash_ensure_tail /bin /usr/bin /usr/sbin /sbin
+
+export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+_bash_prepend_dir "$PNPM_HOME/bin"
+
+export CARGO_HOME="${CARGO_HOME:-$HOME/.local/share/cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.local/share/rustup}"
+_bash_prepend_dir "$CARGO_HOME/bin"
+
+if [ -r "$HOME/.vite-plus/env" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.vite-plus/env"
+fi
+
+if [ -f "$HOME/.config/opencode/.zai-coding-plan.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$HOME/.config/opencode/.zai-coding-plan.env"
+  set +a
+fi
+
+# Single-user nix on Linux. Darwin gets nix from the system profile.
+if [ -f "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+fi
+
+# nix-darwin keeps it under /etc/profiles; standalone Home Manager on Linux
+# under the user profile.
+for _hm_sess in \
+  "/etc/profiles/per-user/${USER:-${LOGNAME:-}}/etc/profile.d/hm-session-vars.sh" \
+  "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" \
+  "$XDG_STATE_HOME/nix/profiles/home-manager/home-path/etc/profile.d/hm-session-vars.sh"
+do
+  if [ -f "$_hm_sess" ]; then
+    # shellcheck disable=SC1090
+    . "$_hm_sess"
+    break
+  fi
+done
+unset _hm_sess
+
+export XDG_PROJECTS_DIR="${XDG_PROJECTS_DIR:-$HOME/Projects}"
+
+# With XDG_CACHE_HOME set, bun puts globals under it; path.sh adds the bin.
+export BUN_INSTALL="${BUN_INSTALL:-$XDG_CACHE_HOME/.bun}"
+
+export GEM_HOME="${GEM_HOME:-$XDG_DATA_HOME/gem}"
+export GEM_SPEC_CACHE="${GEM_SPEC_CACHE:-$XDG_CACHE_HOME/gem}"
+
+# Toolchain bins, appended so `go install` and friends resolve in agent shells.
+for _dev_dir in \
+  "${GOPATH:-$HOME/go}/bin" \
+  "$GEM_HOME/bin" \
+  "$HOME/.dotnet/tools" \
+  "${NIMBLE_DIR:-$HOME/.nimble}/bin"
+do
+  [ -d "$_dev_dir" ] && _bash_ensure_tail "$_dev_dir"
+done
+unset _dev_dir
+
+if [ -r "$HOME/.local/bin/env" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.local/bin/env"
+fi
+
+unset -f _bash_prepend_dir _bash_ensure_tail

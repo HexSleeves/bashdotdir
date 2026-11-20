@@ -1,0 +1,70 @@
+# Interactive bash. `bashrc` sources this only when $- contains i.
+# Prompt, direnv, mise, and atuin are installed here as hooks; none of them
+# fork while this file is loading. A tty pays for `starship prompt` once,
+# inside PROMPT_COMMAND, before the first prompt.
+
+# Nix-darwin's /etc/bashrc may replace PATH and set EDITOR=nano. Keep the
+# environment bashenv already built, and take the nix vars (cert, XDG dirs).
+# Arch's bash reads /etc/bash.bashrc itself and sets BASHRCSOURCED; sourcing it
+# again would load bash_completion twice.
+_saved_path=$PATH
+_saved_editor=${EDITOR:-nvim}
+_saved_visual=${VISUAL:-${_saved_editor}}
+_saved_pager=${PAGER:-less}
+if [ -f /etc/bashrc ]; then
+  # shellcheck disable=SC1091
+  . /etc/bashrc
+elif [ -f /etc/bash.bashrc ] && [ -z "${BASHRCSOURCED-}" ]; then
+  # shellcheck disable=SC1091
+  . /etc/bash.bashrc
+fi
+PATH=$_saved_path
+export EDITOR=$_saved_editor VISUAL=$_saved_visual PAGER=$_saved_pager
+unset _saved_path _saved_editor _saved_visual _saved_pager
+
+# Omarchy's defaults minus `init`, which conf.d replaces; `try` below is copied
+# from it. conf.d loads after and wins on conflicts. envs exports BAT_THEME
+# unconditionally, so the Home Manager value is put back.
+_omarchy_bash=${OMARCHY_PATH:-/usr/share/omarchy}/default/bash
+if [ -r "$_omarchy_bash/envs" ]; then
+  _saved_bat=${BAT_THEME-}
+  for _f in envs shell aliases functions completions; do
+    # shellcheck disable=SC1090
+    [ -r "$_omarchy_bash/$_f" ] && . "$_omarchy_bash/$_f"
+  done
+  unset _f
+  [ -n "$_saved_bat" ] && BAT_THEME=$_saved_bat
+  unset _saved_bat
+  [ -r "$_omarchy_bash/inputrc" ] && bind -f "$_omarchy_bash/inputrc"
+  if command -v try >/dev/null 2>&1; then
+    try() {
+      unset -f try
+      eval "$(SHELL=/bin/bash command try init ~/Work/tries)"
+      try "$@"
+    }
+  fi
+fi
+unset _omarchy_bash
+
+# Re-run last so neither /etc nor Omarchy's rc can reorder the PATH contract.
+if [ -f "$HOME/.config/shell/path.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.config/shell/path.sh"
+fi
+
+# Top-level loop, not a function: `return` inside a conf.d file must leave
+# that file only. A return from a function would skip the rest of the directory.
+for _rc in "$BASHDOTDIR"/conf.d/*.sh; do
+  [ -f "$_rc" ] || continue
+  case ${_rc##*/} in
+    '~'*) continue ;;
+  esac
+  # shellcheck disable=SC1090
+  . "$_rc"
+done
+unset _rc
+
+if [ -r "$HOME/.local/config/bash/bashrc.local" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.local/config/bash/bashrc.local"
+fi
