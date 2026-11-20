@@ -1,13 +1,6 @@
-# Bash entrypoint. Same PATH contract as zsh (~/.config/shell/path.sh), without
-# the interactive stack unless this shell is interactive.
-#
-# Sourced by ~/.bashrc, the stub Home Manager writes, from this repo's clone at
-# ~/.config/bash. Read by interactive shells, by non-interactive sshd bash, and
-# (through BASH_ENV, which the macOS login-shell wrapper and Linux's
-# sessionVariables set) by every `bash -c` and bash script: the bash
-# counterpart of ~/.zshenv. Interactive shells continue into
-# $BASHDOTDIR/bashrc.interactive. Login shells also source
-# $BASHDOTDIR/bash_profile.
+# Bash entrypoint, sourced by the ~/.bashrc stub Home Manager writes from this
+# repo's clone at ~/.config/bash. Interactive shells continue into
+# $BASHDOTDIR/bashrc.interactive, login shells into $BASHDOTDIR/bash_profile.
 
 # Non-interactive ssh into the Director sandbox arrives with HOME, USER and
 # LOGNAME unset. Fill them before anything reads $HOME: the guard below is
